@@ -110,6 +110,7 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
     <button onclick="document.getElementById('import-file').click()">⬆ Importar backup</button>
     <button onclick="configurarCarpetaBackup()">📁 Configurar carpeta automática</button>
     <button id="btn-drive" onclick="subirBackupDrive()">☁️ Subir a Google Drive</button>
+    <button id="btn-drive-import" onclick="importarBackupDrive()">⬇️ Importar desde Google Drive</button>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="importarBackup(event)">
   </div>
   <div class="sub" id="carpeta-status" style="margin-top:-8px;margin-bottom:14px"></div>
@@ -678,6 +679,19 @@ async function subirBackupDrive(){
   }
 }
 
+function aplicarBackup(data){
+  if (!data || typeof data.template !== 'object' || typeof data.pagos !== 'object') {
+    alert('El archivo no tiene el formato esperado de backup.');
+    return false;
+  }
+  if (!confirm('Esto va a reemplazar las clases, alumnos y pagos actuales por los del backup (' + (data.fecha || 'sin fecha') + '). ¿Continuar?')) return false;
+  localStorage.setItem(LS_TEMPLATE, JSON.stringify(data.template));
+  localStorage.setItem(LS_PAGOS, JSON.stringify(data.pagos));
+  cargarTemplate();
+  render();
+  alert('Backup importado correctamente.');
+  return true;
+}
 function importarBackup(event){
   const file = event.target.files[0];
   if (!file) return;
@@ -686,19 +700,47 @@ function importarBackup(event){
     let data;
     try { data = JSON.parse(e.target.result); }
     catch (err) { alert('El archivo no es un backup JSON válido.'); return; }
-    if (!data || typeof data.template !== 'object' || typeof data.pagos !== 'object') {
-      alert('El archivo no tiene el formato esperado de backup.');
-      return;
-    }
-    if (!confirm('Esto va a reemplazar las clases, alumnos y pagos actuales por los del backup (' + (data.fecha || 'sin fecha') + '). ¿Continuar?')) return;
-    localStorage.setItem(LS_TEMPLATE, JSON.stringify(data.template));
-    localStorage.setItem(LS_PAGOS, JSON.stringify(data.pagos));
-    cargarTemplate();
-    render();
-    alert('Backup importado correctamente.');
+    aplicarBackup(data);
   };
   reader.readAsText(file);
   event.target.value = '';
+}
+async function importarBackupDrive(){
+  const btn = document.getElementById('btn-drive-import');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Buscando...'; }
+  try {
+    let token = await _getDriveToken();
+    const q = encodeURIComponent(`name contains 'horario-padel-backup' and trashed=false`);
+    let sr = await _fetchConTimeout(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (sr.status === 401 || sr.status === 403){
+      _driveToken = null; _driveTokenExp = 0;
+      token = await _getDriveToken(true);
+      sr = await _fetchConTimeout(
+        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    }
+    if (!sr.ok) throw new Error(`Error ${sr.status} buscando en Drive`);
+    const archivo = (await sr.json()).files?.[0];
+    if (!archivo) { alert('No encontré ningún backup en tu Google Drive todavía.'); return; }
+
+    if (btn) btn.textContent = '⏳ Descargando...';
+    const dr = await _fetchConTimeout(
+      `https://www.googleapis.com/drive/v3/files/${archivo.id}?alt=media`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!dr.ok) throw new Error(`Error ${dr.status} descargando el archivo`);
+    const data = await dr.json();
+    aplicarBackup(data);
+  } catch(e){
+    console.error('Drive import error:', e);
+    alert('❌ Error importando desde Drive: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⬇️ Importar desde Google Drive'; }
+  }
 }
 
 cargarTemplate();
