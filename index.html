@@ -526,7 +526,7 @@ async function _getDriveToken(forceNew = false){
     if (!_driveTokenClient){
       _driveTokenClient = google.accounts.oauth2.initTokenClient({
         client_id: DRIVE_CLIENT_ID,
-        scope: 'https://www.googleapis.com/auth/drive.file',
+        scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly',
         callback: cb
       });
     } else {
@@ -535,16 +535,42 @@ async function _getDriveToken(forceNew = false){
     _driveTokenClient.requestAccessToken({ prompt: forceNew ? 'consent' : 'select_account' });
   });
 }
+const CARPETA_BACKUP_NOMBRE = 'backup horarios y pagos';
+let _carpetaBackupId = null;
+async function _getCarpetaBackupId(token){
+  if (_carpetaBackupId) return _carpetaBackupId;
+  const cacheada = localStorage.getItem('drive_carpeta_backup_id');
+  if (cacheada) { _carpetaBackupId = cacheada; return _carpetaBackupId; }
+  const q = encodeURIComponent(`name = '${CARPETA_BACKUP_NOMBRE}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
+  try {
+    const r = await _fetchConTimeout(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=1`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (r.ok){
+      const carpeta = (await r.json()).files?.[0];
+      if (carpeta){
+        _carpetaBackupId = carpeta.id;
+        localStorage.setItem('drive_carpeta_backup_id', carpeta.id);
+        return _carpetaBackupId;
+      }
+    }
+  } catch(e) { console.warn('Buscar carpeta Drive:', e.message); }
+  return null;
+}
+
 async function subirBackupDrive(){
   const btn = document.getElementById('btn-drive');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Conectando...'; }
   try {
     let token = await _getDriveToken();
     const { nombre, contenido } = generarDatosBackup();
+    const carpetaId = await _getCarpetaBackupId(token);
     if (btn) btn.textContent = '⏳ Subiendo...';
 
     let existingId = null;
-    const q = encodeURIComponent(`name contains 'horario-padel-backup' and trashed=false`);
+    const enCarpeta = carpetaId ? ` and '${carpetaId}' in parents` : '';
+    const q = encodeURIComponent(`name contains 'horario-padel-backup' and trashed=false${enCarpeta}`);
     try {
       const sr = await _fetchConTimeout(
         `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=1`,
@@ -565,8 +591,10 @@ async function subirBackupDrive(){
       console.warn('Drive search:', searchErr.message);
     }
 
-    const boundary = 'pdl' + Date.now();
-    const meta     = JSON.stringify({ name: nombre, mimeType: 'application/json' });
+    const boundary  = 'pdl' + Date.now();
+    const metaObj    = { name: nombre, mimeType: 'application/json' };
+    if (!existingId && carpetaId) metaObj.parents = [carpetaId];
+    const meta     = JSON.stringify(metaObj);
     const body     = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${contenido}\r\n--${boundary}--`;
 
     const uploadUrl = existingId
@@ -590,7 +618,7 @@ async function subirBackupDrive(){
       }
       throw new Error(err?.error?.message || `Error ${res.status}`);
     }
-    alert('✅ Backup subido a Google Drive');
+    alert(carpetaId ? `✅ Backup guardado en la carpeta "${CARPETA_BACKUP_NOMBRE}"` : '✅ Backup subido a Google Drive (no encontré la carpeta "'+CARPETA_BACKUP_NOMBRE+'", quedó en la raíz)');
   } catch(e){
     const cancelErrors = ['popup_closed_by_user','access_denied','user_cancel','immediate_failed'];
     if (cancelErrors.includes(e.message)) {
@@ -622,7 +650,9 @@ async function importarBackupDrive(){
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Buscando...'; }
   try {
     let token = await _getDriveToken();
-    const q = encodeURIComponent(`name contains 'horario-padel-backup' and trashed=false`);
+    const carpetaId = await _getCarpetaBackupId(token);
+    const enCarpeta = carpetaId ? ` and '${carpetaId}' in parents` : '';
+    const q = encodeURIComponent(`name contains 'horario-padel-backup' and trashed=false${enCarpeta}`);
     let sr = await _fetchConTimeout(
       `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`,
       { headers: { Authorization: `Bearer ${token}` } }
