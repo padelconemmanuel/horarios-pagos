@@ -33,9 +33,9 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
 .sum-card.ok b{color:var(--acc)}
 .sum-card.pend b{color:var(--am)}
 
-.day{background:linear-gradient(160deg,var(--s1),var(--s2));border:1px solid rgba(255,255,255,.07);border-radius:18px;margin-bottom:14px;overflow:hidden}
+.day{background:linear-gradient(160deg,var(--s1),var(--s2));border:1px solid rgba(255,255,255,.07);border-left:4px solid var(--dc,var(--acc));border-radius:18px;margin-bottom:14px;overflow:hidden}
 .day-h{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer}
-.day-h h2{font-size:15px;font-weight:800}
+.day-h h2{font-size:15px;font-weight:800;color:var(--dc,var(--t1))}
 .day-h .day-tot{font-size:12px;color:var(--t2)}
 .day-body{border-top:1px solid rgba(255,255,255,.06)}
 .day-body.collapsed{display:none}
@@ -195,6 +195,15 @@ const DIAS = [
 ];
 DIAS.forEach(d => d.clases.forEach((cl,i) => cl.id = d.id+'-'+i));
 
+const DIA_COLOR = {
+  lun: '#00e5a0',
+  mar: '#00cfff',
+  mie: '#ffb648',
+  jue: '#c98fff',
+  vie: '#ff5d8f',
+  sab: '#4facfe',
+};
+
 const LS_TEMPLATE = 'padel_horario_template_v3';
 const LS_PAGOS = 'padel_horario_pagos_v3';
 const METODOS = [
@@ -329,7 +338,7 @@ function render(){
       return s + (todos ? (cl.p||0) : 0);
     }, 0);
     return `
-      <div class="day">
+      <div class="day" style="--dc:${DIA_COLOR[d.id]}">
         <div class="day-h" onclick="toggleDia('${d.id}')">
           <h2>${d.nombre}</h2>
           <div class="day-tot">${d.clases.length} clases · ${fmtMoney(totalDia)} cobrado</div>
