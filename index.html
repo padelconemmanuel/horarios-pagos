@@ -106,14 +106,9 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
   <div class="legend"><span><b style="color:var(--acc2)">C</b> = cancha cubierta</span><span><b style="color:var(--am)">D</b> = cancha descubierta</span></div>
 
   <div class="backupbar">
-    <button onclick="exportarBackup()">⬇ Exportar backup</button>
-    <button onclick="document.getElementById('import-file').click()">⬆ Importar backup</button>
-    <button onclick="configurarCarpetaBackup()">📁 Configurar carpeta automática</button>
     <button id="btn-drive" onclick="subirBackupDrive()">☁️ Subir a Google Drive</button>
     <button id="btn-drive-import" onclick="importarBackupDrive()">⬇️ Importar desde Google Drive</button>
-    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importarBackup(event)">
   </div>
-  <div class="sub" id="carpeta-status" style="margin-top:-8px;margin-bottom:14px"></div>
 
   <div class="weeknav">
     <button onclick="cambiarSemana(-1)">◀</button>
@@ -474,68 +469,6 @@ function eliminarAlumno(id, idx){
   render();
 }
 
-const FS_DB_NAME = 'padel_horario_fs';
-function abrirFsDb(){
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(FS_DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore('handles');
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-function guardarHandleCarpeta(handle){
-  return abrirFsDb().then(db => new Promise((resolve, reject) => {
-    const tx = db.transaction('handles', 'readwrite');
-    tx.objectStore('handles').put(handle, 'backupDir');
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  }));
-}
-function obtenerHandleCarpeta(){
-  return abrirFsDb().then(db => new Promise((resolve, reject) => {
-    const tx = db.transaction('handles', 'readonly');
-    const req = tx.objectStore('handles').get('backupDir');
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => reject(req.error);
-  }));
-}
-function pintarEstadoCarpeta(nombre){
-  const el = document.getElementById('carpeta-status');
-  if (!el) return;
-  el.textContent = nombre ? `📁 Backups automáticos guardándose en: "${nombre}"` : '';
-}
-async function configurarCarpetaBackup(){
-  if (!window.showDirectoryPicker){
-    alert('Tu navegador no soporta elegir una carpeta para guardado automático (anda en Chrome o Edge de escritorio). Vas a seguir usando la descarga manual.');
-    return;
-  }
-  try {
-    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
-    await guardarHandleCarpeta(handle);
-    pintarEstadoCarpeta(handle.name);
-    alert('Listo. De ahora en más, "Exportar backup" guarda automático en esa carpeta, sin cartel de descarga.');
-  } catch(err) {
-    // el usuario canceló el selector de carpeta
-  }
-}
-async function intentarGuardarAuto(nombre, contenido){
-  let handle;
-  try { handle = await obtenerHandleCarpeta(); } catch(e) { return false; }
-  if (!handle) return false;
-  try {
-    let permiso = await handle.queryPermission({ mode: 'readwrite' });
-    if (permiso === 'prompt') permiso = await handle.requestPermission({ mode: 'readwrite' });
-    if (permiso !== 'granted') return false;
-    const fileHandle = await handle.getFileHandle(nombre, { create: true });
-    const writable = await fileHandle.createWritable();
-    await writable.write(contenido);
-    await writable.close();
-    pintarEstadoCarpeta(handle.name);
-    return true;
-  } catch(err) {
-    return false;
-  }
-}
 function generarDatosBackup(){
   const data = {
     version: 1,
@@ -548,23 +481,6 @@ function generarDatosBackup(){
     nombre: 'horario-padel-backup-' + new Date().toISOString().slice(0,10) + '.json',
   };
 }
-async function exportarBackup(){
-  const { nombre, contenido } = generarDatosBackup();
-
-  const guardadoAuto = await intentarGuardarAuto(nombre, contenido);
-  if (guardadoAuto) return;
-
-  const blob = new Blob([contenido], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = nombre;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
 // ── Backup a Google Drive (mismo mecanismo OAuth que la app principal) ────
 const DRIVE_CLIENT_ID = '228796545161-onuqd5m0l2m92ove62b4u5dhse3n5uvh.apps.googleusercontent.com';
 let _driveTokenClient = null;
@@ -692,19 +608,6 @@ function aplicarBackup(data){
   alert('Backup importado correctamente.');
   return true;
 }
-function importarBackup(event){
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    let data;
-    try { data = JSON.parse(e.target.result); }
-    catch (err) { alert('El archivo no es un backup JSON válido.'); return; }
-    aplicarBackup(data);
-  };
-  reader.readAsText(file);
-  event.target.value = '';
-}
 async function importarBackupDrive(){
   const btn = document.getElementById('btn-drive-import');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Buscando...'; }
@@ -745,7 +648,6 @@ async function importarBackupDrive(){
 
 cargarTemplate();
 render();
-obtenerHandleCarpeta().then(h => { if (h) pintarEstadoCarpeta(h.name); }).catch(()=>{});
 </script>
 </body>
 </html>
