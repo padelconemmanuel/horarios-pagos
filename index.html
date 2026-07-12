@@ -109,6 +109,7 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
     <button onclick="exportarBackup()">⬇ Exportar backup</button>
     <button onclick="document.getElementById('import-file').click()">⬆ Importar backup</button>
     <button onclick="configurarCarpetaBackup()">📁 Configurar carpeta automática</button>
+    <button id="btn-drive" onclick="subirBackupDrive()">☁️ Subir a Google Drive</button>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="importarBackup(event)">
   </div>
   <div class="sub" id="carpeta-status" style="margin-top:-8px;margin-bottom:14px"></div>
@@ -534,15 +535,20 @@ async function intentarGuardarAuto(nombre, contenido){
     return false;
   }
 }
-async function exportarBackup(){
+function generarDatosBackup(){
   const data = {
     version: 1,
     fecha: new Date().toISOString(),
     template: JSON.parse(localStorage.getItem(LS_TEMPLATE) || '{}'),
     pagos: JSON.parse(localStorage.getItem(LS_PAGOS) || '{}'),
   };
-  const contenido = JSON.stringify(data, null, 2);
-  const nombre = 'horario-padel-backup-' + new Date().toISOString().slice(0,10) + '.json';
+  return {
+    contenido: JSON.stringify(data, null, 2),
+    nombre: 'horario-padel-backup-' + new Date().toISOString().slice(0,10) + '.json',
+  };
+}
+async function exportarBackup(){
+  const { nombre, contenido } = generarDatosBackup();
 
   const guardadoAuto = await intentarGuardarAuto(nombre, contenido);
   if (guardadoAuto) return;
@@ -557,6 +563,121 @@ async function exportarBackup(){
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// ── Backup a Google Drive (mismo mecanismo OAuth que la app principal) ────
+const DRIVE_CLIENT_ID = '228796545161-onuqd5m0l2m92ove62b4u5dhse3n5uvh.apps.googleusercontent.com';
+let _driveTokenClient = null;
+let _driveToken       = null;
+let _driveTokenExp    = 0;
+
+function _loadGIS(){
+  return new Promise(res => {
+    if (window.google?.accounts?.oauth2) return res();
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.onload = res; s.onerror = () => res();
+    document.head.appendChild(s);
+  });
+}
+function _fetchConTimeout(url, opts, ms = 20000){
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(id));
+}
+async function _getDriveToken(forceNew = false){
+  if (!forceNew && _driveToken && Date.now() < _driveTokenExp - 60000) return _driveToken;
+  await _loadGIS();
+  if (!window.google?.accounts?.oauth2) throw new Error('No se pudo cargar Google Sign-In');
+  return new Promise((resolve, reject) => {
+    const tid = setTimeout(() => reject(new Error('Tiempo de espera agotado')), 120000);
+    const cb = (resp) => {
+      clearTimeout(tid);
+      if (resp.error) { _driveToken = null; _driveTokenExp = 0; reject(new Error(resp.error_description || resp.error)); return; }
+      _driveToken    = resp.access_token;
+      _driveTokenExp = Date.now() + (resp.expires_in || 3600) * 1000;
+      resolve(_driveToken);
+    };
+    if (!_driveTokenClient){
+      _driveTokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: DRIVE_CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: cb
+      });
+    } else {
+      _driveTokenClient.callback = cb;
+    }
+    _driveTokenClient.requestAccessToken({ prompt: forceNew ? 'consent' : 'select_account' });
+  });
+}
+async function subirBackupDrive(){
+  const btn = document.getElementById('btn-drive');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Conectando...'; }
+  try {
+    let token = await _getDriveToken();
+    const { nombre, contenido } = generarDatosBackup();
+    if (btn) btn.textContent = '⏳ Subiendo...';
+
+    let existingId = null;
+    const q = encodeURIComponent(`name contains 'horario-padel-backup' and trashed=false`);
+    try {
+      const sr = await _fetchConTimeout(
+        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=1`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (sr.status === 401 || sr.status === 403){
+        _driveToken = null; _driveTokenExp = 0;
+        token = await _getDriveToken(true);
+        const sr2 = await _fetchConTimeout(
+          `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=1`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (sr2.ok) existingId = (await sr2.json()).files?.[0]?.id || null;
+      } else if (sr.ok){
+        existingId = (await sr.json()).files?.[0]?.id || null;
+      }
+    } catch(searchErr) {
+      console.warn('Drive search:', searchErr.message);
+    }
+
+    const boundary = 'pdl' + Date.now();
+    const meta     = JSON.stringify({ name: nombre, mimeType: 'application/json' });
+    const body     = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${contenido}\r\n--${boundary}--`;
+
+    const uploadUrl = existingId
+      ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart`
+      : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+
+    const res = await _fetchConTimeout(uploadUrl, {
+      method: existingId ? 'PATCH' : 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': `multipart/related; boundary="${boundary}"`
+      },
+      body
+    }, 30000);
+
+    if (!res.ok){
+      const err = await res.json().catch(() => ({}));
+      if (res.status === 401 || res.status === 403){
+        _driveToken = null; _driveTokenExp = 0;
+        throw new Error('Permiso denegado. Intentá de nuevo para reconectar.');
+      }
+      throw new Error(err?.error?.message || `Error ${res.status}`);
+    }
+    alert('✅ Backup subido a Google Drive');
+  } catch(e){
+    const cancelErrors = ['popup_closed_by_user','access_denied','user_cancel','immediate_failed'];
+    if (cancelErrors.includes(e.message)) {
+      alert('⚠️ Autenticación con Google cancelada');
+    } else {
+      console.error('Drive backup error:', e);
+      alert('❌ Error subiendo a Drive: ' + e.message);
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '☁️ Subir a Google Drive'; }
+  }
+}
+
 function importarBackup(event){
   const file = event.target.files[0];
   if (!file) return;
