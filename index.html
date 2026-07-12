@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" translate="no">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="google" content="notranslate">
 <title>Horario Semanal — Padel Con Emmanuel</title>
 <meta name="theme-color" content="#060912">
 <style>
@@ -107,8 +108,10 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
   <div class="backupbar">
     <button onclick="exportarBackup()">⬇ Exportar backup</button>
     <button onclick="document.getElementById('import-file').click()">⬆ Importar backup</button>
+    <button onclick="configurarCarpetaBackup()">📁 Configurar carpeta automática</button>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="importarBackup(event)">
   </div>
+  <div class="sub" id="carpeta-status" style="margin-top:-8px;margin-bottom:14px"></div>
 
   <div class="weeknav">
     <button onclick="cambiarSemana(-1)">◀</button>
@@ -289,7 +292,7 @@ function render(){
         : `<input class="texto solo" value="${cl.alumnos[0].replace(/"/g,'&quot;')}" onchange="setAlumno('${cl.id}',0,this.value)">`;
 
       const checkHead = esGrupal
-        ? `<div class="chk general ${todosPagados?'on':''}" title="Marca/desmarca a todos" onclick="toggleGeneral('${weekKey}','${cl.id}')">${todosPagados?'✓':'OK'}</div>`
+        ? `<div class="chk general ${todosPagados?'on':''}" title="Tildar/destildar a todos" onclick="toggleGeneral('${weekKey}','${cl.id}')">${todosPagados?'✓':''}</div>`
         : `${selectMetodo(weekKey, cl.id, 0, metodoDe(pagosCl,0))}<div class="chk ${pagado?'on':''}" onclick="togglePago('${weekKey}','${cl.id}',0)">${pagado?'✓':''}</div>`;
 
       const filasAlumnos = esGrupal ? cl.alumnos.map((nombre, idx) => {
@@ -469,18 +472,86 @@ function eliminarAlumno(id, idx){
   render();
 }
 
-function exportarBackup(){
+const FS_DB_NAME = 'padel_horario_fs';
+function abrirFsDb(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(FS_DB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('handles');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function guardarHandleCarpeta(handle){
+  return abrirFsDb().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').put(handle, 'backupDir');
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+function obtenerHandleCarpeta(){
+  return abrirFsDb().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readonly');
+    const req = tx.objectStore('handles').get('backupDir');
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  }));
+}
+function pintarEstadoCarpeta(nombre){
+  const el = document.getElementById('carpeta-status');
+  if (!el) return;
+  el.textContent = nombre ? `📁 Backups automáticos guardándose en: "${nombre}"` : '';
+}
+async function configurarCarpetaBackup(){
+  if (!window.showDirectoryPicker){
+    alert('Tu navegador no soporta elegir una carpeta para guardado automático (anda en Chrome o Edge de escritorio). Vas a seguir usando la descarga manual.');
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    await guardarHandleCarpeta(handle);
+    pintarEstadoCarpeta(handle.name);
+    alert('Listo. De ahora en más, "Exportar backup" guarda automático en esa carpeta, sin cartel de descarga.');
+  } catch(err) {
+    // el usuario canceló el selector de carpeta
+  }
+}
+async function intentarGuardarAuto(nombre, contenido){
+  let handle;
+  try { handle = await obtenerHandleCarpeta(); } catch(e) { return false; }
+  if (!handle) return false;
+  try {
+    let permiso = await handle.queryPermission({ mode: 'readwrite' });
+    if (permiso === 'prompt') permiso = await handle.requestPermission({ mode: 'readwrite' });
+    if (permiso !== 'granted') return false;
+    const fileHandle = await handle.getFileHandle(nombre, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(contenido);
+    await writable.close();
+    pintarEstadoCarpeta(handle.name);
+    return true;
+  } catch(err) {
+    return false;
+  }
+}
+async function exportarBackup(){
   const data = {
     version: 1,
     fecha: new Date().toISOString(),
     template: JSON.parse(localStorage.getItem(LS_TEMPLATE) || '{}'),
     pagos: JSON.parse(localStorage.getItem(LS_PAGOS) || '{}'),
   };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const contenido = JSON.stringify(data, null, 2);
+  const nombre = 'horario-padel-backup-' + new Date().toISOString().slice(0,10) + '.json';
+
+  const guardadoAuto = await intentarGuardarAuto(nombre, contenido);
+  if (guardadoAuto) return;
+
+  const blob = new Blob([contenido], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'horario-padel-backup-' + new Date().toISOString().slice(0,10) + '.json';
+  a.download = nombre;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -511,6 +582,7 @@ function importarBackup(event){
 
 cargarTemplate();
 render();
+obtenerHandleCarpeta().then(h => { if (h) pintarEstadoCarpeta(h.name); }).catch(()=>{});
 </script>
 </body>
 </html>
