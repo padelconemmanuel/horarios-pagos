@@ -680,28 +680,38 @@ function aplicarBackup(data){
   alert('Backup importado correctamente.');
   return true;
 }
+async function _buscarArchivoDrive(token, nombreContiene, carpetaId){
+  async function buscar(soloEnCarpeta){
+    const enCarpeta = (soloEnCarpeta && carpetaId) ? ` and '${carpetaId}' in parents` : '';
+    const q = encodeURIComponent(`name contains '${nombreContiene}' and trashed=false${enCarpeta}`);
+    let r = await _fetchConTimeout(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (r.status === 401 || r.status === 403){
+      _driveToken = null; _driveTokenExp = 0;
+      token = await _getDriveToken(true);
+      r = await _fetchConTimeout(
+        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    }
+    if (!r.ok) throw new Error(`Error ${r.status} buscando en Drive`);
+    return { archivo: (await r.json()).files?.[0] || null, token };
+  }
+  let { archivo, token: tok } = await buscar(true);
+  if (!archivo && carpetaId) ({ archivo, token: tok } = await buscar(false));
+  return { archivo, token: tok };
+}
+
 async function importarBackupDrive(){
   const btn = document.getElementById('btn-drive-import');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Buscando...'; }
   try {
     let token = await _getDriveToken();
     const carpetaId = await _getCarpetaBackupId(token);
-    const enCarpeta = carpetaId ? ` and '${carpetaId}' in parents` : '';
-    const q = encodeURIComponent(`name contains 'horario-padel-backup' and trashed=false${enCarpeta}`);
-    let sr = await _fetchConTimeout(
-      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (sr.status === 401 || sr.status === 403){
-      _driveToken = null; _driveTokenExp = 0;
-      token = await _getDriveToken(true);
-      sr = await _fetchConTimeout(
-        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-    }
-    if (!sr.ok) throw new Error(`Error ${sr.status} buscando en Drive`);
-    const archivo = (await sr.json()).files?.[0];
+    const res = await _buscarArchivoDrive(token, 'horario-padel-backup', carpetaId);
+    const archivo = res.archivo; token = res.token;
     if (!archivo) { alert('No encontré ningún backup en tu Google Drive todavía.'); return; }
 
     if (btn) btn.textContent = '⏳ Descargando...';
@@ -726,22 +736,8 @@ async function importarContactosDrive(){
   try {
     let token = await _getDriveToken();
     const carpetaId = await _getCarpetaBackupId(token);
-    const enCarpeta = carpetaId ? ` and '${carpetaId}' in parents` : '';
-    const q = encodeURIComponent(`name contains 'PadelConEmmanuel_backup' and trashed=false${enCarpeta}`);
-    let sr = await _fetchConTimeout(
-      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (sr.status === 401 || sr.status === 403){
-      _driveToken = null; _driveTokenExp = 0;
-      token = await _getDriveToken(true);
-      sr = await _fetchConTimeout(
-        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-    }
-    if (!sr.ok) throw new Error(`Error ${sr.status} buscando en Drive`);
-    const archivo = (await sr.json()).files?.[0];
+    const res = await _buscarArchivoDrive(token, 'PadelConEmmanuel_backup', carpetaId);
+    const archivo = res.archivo; token = res.token;
     if (!archivo) { alert('No encontré ningún backup de la app principal (PadelConEmmanuel_backup) en tu Google Drive.'); return; }
 
     if (btn) btn.textContent = '⏳ Descargando...';
