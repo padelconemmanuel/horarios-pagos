@@ -69,6 +69,7 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
 
 .btn-del{flex-shrink:0;width:22px;height:22px;border-radius:7px;border:none;background:transparent;color:var(--t2);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .btn-del:hover{color:var(--rd)}
+.btn-wa{flex-shrink:0;width:22px;height:22px;border-radius:7px;background:rgba(0,229,160,.12);text-decoration:none;font-size:12px;display:inline-flex;align-items:center;justify-content:center;margin-left:4px}
 
 .addrow{display:flex;align-items:center;gap:6px;padding:10px 14px;flex-wrap:wrap}
 .addrow input,.addrow select{background:var(--s2);border:1px solid var(--s3);border-radius:8px;color:var(--t1);font-size:12px;padding:6px 8px;outline:none}
@@ -108,6 +109,7 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
   <div class="backupbar">
     <button id="btn-drive" onclick="subirBackupDrive()">☁️ Subir a Google Drive</button>
     <button id="btn-drive-import" onclick="importarBackupDrive()">⬇️ Importar desde Google Drive</button>
+    <button id="btn-contactos" onclick="importarContactosDrive()">📇 Traer contactos</button>
   </div>
 
   <div class="weeknav">
@@ -206,12 +208,44 @@ const DIA_COLOR = {
 
 const LS_TEMPLATE = 'padel_horario_template_v3';
 const LS_PAGOS = 'padel_horario_pagos_v3';
+const LS_CONTACTOS = 'padel_contactos_v1';
 const METODOS = [
   { v:'', l:'Método' },
   { v:'efectivo', l:'Efectivo' },
   { v:'transferencia', l:'Transferencia' },
   { v:'mercadopago', l:'MercadoPago' },
 ];
+
+function normalizarNombre(s){
+  return s.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\(.*?\)/g, '')
+    .replace(/x\s*\d+/gi, '')
+    .replace(/[^a-z ]/g, '')
+    .trim()
+    .split(' ')[0] || '';
+}
+function normalizarTelAR(tel){
+  let t = tel.replace(/[^\d]/g, '');
+  if (t.startsWith('549')) return t;
+  if (t.startsWith('54'))  return '549' + t.slice(2);
+  if (t.startsWith('9'))   return '54' + t;
+  if (t.startsWith('0'))   return '549' + t.slice(1);
+  return '549' + t;
+}
+function cargarContactos(){
+  const raw = localStorage.getItem(LS_CONTACTOS);
+  return raw ? JSON.parse(raw) : {};
+}
+function telDeAlumno(nombre){
+  const contactos = cargarContactos();
+  return contactos[normalizarNombre(nombre)] || '';
+}
+function botonWA(nombre){
+  const tel = telDeAlumno(nombre);
+  if (!tel) return '';
+  return `<a class="btn-wa" href="https://wa.me/${normalizarTelAR(tel)}" target="_blank" rel="noopener" title="Escribir por WhatsApp">💬</a>`;
+}
 
 function cargarTemplate(){
   const raw = localStorage.getItem(LS_TEMPLATE);
@@ -295,7 +329,7 @@ function render(){
 
       const headNombre = esGrupal
         ? `<span class="grupal-lbl">Grupo (${cl.alumnos.length})</span>`
-        : `<input class="texto solo" value="${cl.alumnos[0].replace(/"/g,'&quot;')}" onchange="setAlumno('${cl.id}',0,this.value)">`;
+        : `<input class="texto solo" value="${cl.alumnos[0].replace(/"/g,'&quot;')}" onchange="setAlumno('${cl.id}',0,this.value)">${botonWA(cl.alumnos[0])}`;
 
       const checkHead = esGrupal
         ? `<div class="chk general ${todosPagados?'on':''}" title="Tildar/destildar a todos" onclick="toggleGeneral('${weekKey}','${cl.id}')">${todosPagados?'✓':''}</div>`
@@ -306,6 +340,7 @@ function render(){
         return `
           <div class="row alumno">
             <input class="texto" value="${nombre.replace(/"/g,'&quot;')}" onchange="setAlumno('${cl.id}',${idx},this.value)">
+            ${botonWA(nombre)}
             ${selectMetodo(weekKey, cl.id, idx, metodoDe(pagosCl,idx))}
             <div class="chk ${p?'on':''}" onclick="togglePago('${weekKey}','${cl.id}',${idx})">${p?'✓':''}</div>
             <button class="btn-del" title="Quitar alumno" onclick="eliminarAlumno('${cl.id}',${idx})">×</button>
@@ -682,6 +717,53 @@ async function importarBackupDrive(){
     alert('❌ Error importando desde Drive: ' + e.message);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '⬇️ Importar desde Google Drive'; }
+  }
+}
+
+async function importarContactosDrive(){
+  const btn = document.getElementById('btn-contactos');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Buscando...'; }
+  try {
+    let token = await _getDriveToken();
+    const carpetaId = await _getCarpetaBackupId(token);
+    const enCarpeta = carpetaId ? ` and '${carpetaId}' in parents` : '';
+    const q = encodeURIComponent(`name contains 'PadelConEmmanuel_backup' and trashed=false${enCarpeta}`);
+    let sr = await _fetchConTimeout(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (sr.status === 401 || sr.status === 403){
+      _driveToken = null; _driveTokenExp = 0;
+      token = await _getDriveToken(true);
+      sr = await _fetchConTimeout(
+        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    }
+    if (!sr.ok) throw new Error(`Error ${sr.status} buscando en Drive`);
+    const archivo = (await sr.json()).files?.[0];
+    if (!archivo) { alert('No encontré ningún backup de la app principal (PadelConEmmanuel_backup) en tu Google Drive.'); return; }
+
+    if (btn) btn.textContent = '⏳ Descargando...';
+    const dr = await _fetchConTimeout(
+      `https://www.googleapis.com/drive/v3/files/${archivo.id}?alt=media`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!dr.ok) throw new Error(`Error ${dr.status} descargando el archivo`);
+    const data = await dr.json();
+    const alumnos = Array.isArray(data.alumnos) ? data.alumnos : [];
+    const contactos = {};
+    alumnos.forEach(a => {
+      if (a.nombre && a.tel) contactos[normalizarNombre(a.nombre)] = a.tel;
+    });
+    localStorage.setItem(LS_CONTACTOS, JSON.stringify(contactos));
+    render();
+    alert(`✅ ${Object.keys(contactos).length} contactos con teléfono actualizados.`);
+  } catch(e){
+    console.error('Drive contactos error:', e);
+    alert('❌ Error trayendo contactos: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📇 Traer contactos'; }
   }
 }
 
