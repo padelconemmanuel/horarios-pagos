@@ -235,38 +235,23 @@ function normalizarTelAR(tel){
 }
 function cargarContactos(){
   const raw = localStorage.getItem(LS_CONTACTOS);
-  return raw ? JSON.parse(raw) : {};
+  const data = raw ? JSON.parse(raw) : [];
+  return Array.isArray(data) ? data : []; // formato viejo (mapa) queda descartado, hay que "Traer contactos" de nuevo
 }
 function telDeAlumno(nombre){
-  const contactos = cargarContactos();
-  return contactos[normalizarNombre(nombre)] || '';
+  const clave = normalizarNombre(nombre);
+  const c = cargarContactos().find(c => normalizarNombre(c.nombre) === clave);
+  return c ? c.tel : '';
 }
 function botonWA(nombre){
   const tel = telDeAlumno(nombre);
   if (!tel) return '';
   return `<a class="btn-wa" href="https://wa.me/${normalizarTelAR(tel)}" target="_blank" rel="noopener" title="Escribir por WhatsApp">💬</a>`;
 }
-function guardarContacto(nombre, tel){
+function datalistContactos(){
   const contactos = cargarContactos();
-  contactos[normalizarNombre(nombre)] = tel;
-  localStorage.setItem(LS_CONTACTOS, JSON.stringify(contactos));
-}
-async function buscarContacto(inputId){
-  if (!('contacts' in navigator && 'ContactsManager' in window)){
-    alert('Tu navegador no soporta buscar en la agenda del teléfono (anda en Chrome para Android). Escribí el nombre a mano.');
-    return;
-  }
-  try {
-    const contacts = await navigator.contacts.select(['name','tel'], { multiple: false });
-    if (!contacts || !contacts.length) return;
-    const c = contacts[0];
-    const nombre = (c.name && c.name[0]) || '';
-    const tel    = (c.tel  && c.tel[0])  || '';
-    if (!nombre) return;
-    const input = document.getElementById(inputId);
-    if (input) input.value = nombre;
-    if (tel) guardarContacto(nombre, tel);
-  } catch(e){ console.error(e); }
+  if (!contactos.length) return '';
+  return `<datalist id="dl-contactos">${contactos.map(c => `<option value="${c.nombre.replace(/"/g,'&quot;')}">`).join('')}</datalist>`;
 }
 
 function cargarTemplate(){
@@ -384,8 +369,7 @@ function render(){
           </div>
           ${filasAlumnos}
           <div class="row add-alumno-row">
-            <input class="texto" id="add-alumno-${cl.id}" placeholder="+ agregar alumno a esta clase">
-            <button class="btn-del" title="Buscar en contactos" onclick="buscarContacto('add-alumno-${cl.id}')">🔍</button>
+            <input class="texto" id="add-alumno-${cl.id}" list="dl-contactos" placeholder="+ agregar alumno a esta clase">
             <button class="btn-del" style="color:var(--acc);font-size:18px" title="Agregar" onclick="agregarAlumno('${cl.id}')">+</button>
           </div>
         </div>`;
@@ -406,8 +390,7 @@ function render(){
           <div class="add-clase-row">
             <div class="addrow">
               <input class="add-hora" id="add-hora-${d.id}" placeholder="hh:mm">
-              <input class="add-nombre" id="add-nombre-${d.id}" placeholder="Alumno(s), ej: Juan y Pedro">
-              <button class="btn-del" title="Buscar en contactos" onclick="buscarContacto('add-nombre-${d.id}')">🔍</button>
+              <input class="add-nombre" id="add-nombre-${d.id}" list="dl-contactos" placeholder="Alumno(s), ej: Juan y Pedro">
               <select class="add-cancha" id="add-cancha-${d.id}"><option value="">?</option><option value="C">C</option><option value="D">D</option></select>
               <input class="add-precio" id="add-precio-${d.id}" type="number" placeholder="$">
               <button onclick="agregarClase('${d.id}')">+ Agregar clase</button>
@@ -417,7 +400,7 @@ function render(){
       </div>`;
   }).join('');
 
-  document.getElementById('dias').innerHTML = html;
+  document.getElementById('dias').innerHTML = html + datalistContactos();
   document.getElementById('s-total').textContent = totalClases;
   document.getElementById('s-cobrado').textContent = fmtMoney(cobrado);
   document.getElementById('s-pendiente').textContent = fmtMoney(pendiente);
@@ -772,13 +755,10 @@ async function importarContactosDrive(){
     if (!dr.ok) throw new Error(`Error ${dr.status} descargando el archivo`);
     const data = await dr.json();
     const alumnos = Array.isArray(data.alumnos) ? data.alumnos : [];
-    const contactos = {};
-    alumnos.forEach(a => {
-      if (a.nombre && a.tel) contactos[normalizarNombre(a.nombre)] = a.tel;
-    });
+    const contactos = alumnos.filter(a => a.nombre && a.tel).map(a => ({ nombre: a.nombre, tel: a.tel }));
     localStorage.setItem(LS_CONTACTOS, JSON.stringify(contactos));
     render();
-    alert(`✅ ${Object.keys(contactos).length} contactos con teléfono actualizados.`);
+    alert(`✅ ${contactos.length} contactos con teléfono actualizados.`);
   } catch(e){
     console.error('Drive contactos error:', e);
     alert('❌ Error trayendo contactos: ' + e.message);
