@@ -246,6 +246,28 @@ function botonWA(nombre){
   if (!tel) return '';
   return `<a class="btn-wa" href="https://wa.me/${normalizarTelAR(tel)}" target="_blank" rel="noopener" title="Escribir por WhatsApp">💬</a>`;
 }
+function guardarContacto(nombre, tel){
+  const contactos = cargarContactos();
+  contactos[normalizarNombre(nombre)] = tel;
+  localStorage.setItem(LS_CONTACTOS, JSON.stringify(contactos));
+}
+async function buscarContacto(inputId){
+  if (!('contacts' in navigator && 'ContactsManager' in window)){
+    alert('Tu navegador no soporta buscar en la agenda del teléfono (anda en Chrome para Android). Escribí el nombre a mano.');
+    return;
+  }
+  try {
+    const contacts = await navigator.contacts.select(['name','tel'], { multiple: false });
+    if (!contacts || !contacts.length) return;
+    const c = contacts[0];
+    const nombre = (c.name && c.name[0]) || '';
+    const tel    = (c.tel  && c.tel[0])  || '';
+    if (!nombre) return;
+    const input = document.getElementById(inputId);
+    if (input) input.value = nombre;
+    if (tel) guardarContacto(nombre, tel);
+  } catch(e){ console.error(e); }
+}
 
 function cargarTemplate(){
   const raw = localStorage.getItem(LS_TEMPLATE);
@@ -363,6 +385,7 @@ function render(){
           ${filasAlumnos}
           <div class="row add-alumno-row">
             <input class="texto" id="add-alumno-${cl.id}" placeholder="+ agregar alumno a esta clase">
+            <button class="btn-del" title="Buscar en contactos" onclick="buscarContacto('add-alumno-${cl.id}')">🔍</button>
             <button class="btn-del" style="color:var(--acc);font-size:18px" title="Agregar" onclick="agregarAlumno('${cl.id}')">+</button>
           </div>
         </div>`;
@@ -384,6 +407,7 @@ function render(){
             <div class="addrow">
               <input class="add-hora" id="add-hora-${d.id}" placeholder="hh:mm">
               <input class="add-nombre" id="add-nombre-${d.id}" placeholder="Alumno(s), ej: Juan y Pedro">
+              <button class="btn-del" title="Buscar en contactos" onclick="buscarContacto('add-nombre-${d.id}')">🔍</button>
               <select class="add-cancha" id="add-cancha-${d.id}"><option value="">?</option><option value="C">C</option><option value="D">D</option></select>
               <input class="add-precio" id="add-precio-${d.id}" type="number" placeholder="$">
               <button onclick="agregarClase('${d.id}')">+ Agregar clase</button>
