@@ -110,6 +110,7 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
     <button id="btn-drive" onclick="subirBackupDrive()">☁️ Subir a Google Drive</button>
     <button id="btn-drive-import" onclick="importarBackupDrive()">⬇️ Importar desde Google Drive</button>
     <button id="btn-contactos" onclick="importarContactosDrive()">📇 Traer contactos</button>
+    <button id="btn-verificar-contactos" onclick="verificarContactosAmbiguos()">⚠️ Verificar contactos</button>
   </div>
 
   <div class="weeknav">
@@ -216,14 +217,17 @@ const METODOS = [
   { v:'mercadopago', l:'MercadoPago' },
 ];
 
-function normalizarNombre(s){
+function normalizarNombreCompleto(s){
   return s.toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/\(.*?\)/g, '')
     .replace(/x\s*\d+/gi, '')
     .replace(/[^a-z ]/g, '')
-    .trim()
-    .split(' ')[0] || '';
+    .replace(/\s+/g,' ')
+    .trim();
+}
+function normalizarNombre(s){
+  return normalizarNombreCompleto(s).split(' ')[0] || '';
 }
 function normalizarTelAR(tel){
   let t = tel.replace(/[^\d]/g, '');
@@ -239,9 +243,28 @@ function cargarContactos(){
   return Array.isArray(data) ? data : []; // formato viejo (mapa) queda descartado, hay que "Traer contactos" de nuevo
 }
 function telDeAlumno(nombre){
-  const clave = normalizarNombre(nombre);
-  const c = cargarContactos().find(c => normalizarNombre(c.nombre) === clave);
-  return c ? c.tel : '';
+  const contactos = cargarContactos();
+  const claveCompleta = normalizarNombreCompleto(nombre);
+
+  // 1) Coincidencia exacta por nombre completo (más confiable)
+  let c = contactos.find(c => normalizarNombreCompleto(c.nombre) === claveCompleta);
+  if (c) return c.tel;
+
+  // 2) El nombre de la clase empieza con el nombre completo del contacto
+  //    (ej: clase "Sofi Viernes 7 Am" vs contacto "Sofi")
+  const candidatosInicio = contactos.filter(c => {
+    const nc = normalizarNombreCompleto(c.nombre);
+    return nc && claveCompleta.startsWith(nc + ' ') || claveCompleta === nc;
+  });
+  if (candidatosInicio.length === 1) return candidatosInicio[0].tel;
+
+  // 3) Fallback: primera palabra, SOLO si hay un único contacto que matchea
+  //    (si hay ambigüedad entre varios contactos con el mismo primer nombre, no adivinar)
+  const clave1 = normalizarNombre(nombre);
+  const candidatos1 = contactos.filter(c => normalizarNombre(c.nombre) === clave1);
+  if (candidatos1.length === 1) return candidatos1[0].tel;
+
+  return ''; // ambiguo o sin match — mejor no asociar mal
 }
 function botonWA(nombre){
   const tel = telDeAlumno(nombre);
@@ -735,6 +758,52 @@ async function importarBackupDrive(){
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '⬇️ Importar desde Google Drive'; }
   }
+}
+
+function verificarContactosAmbiguos(){
+  const contactos = cargarContactos();
+  if (!contactos.length) { alert('Primero traé los contactos con el botón "📇 Traer contactos"'); return; }
+
+  // Detectar primeros-nombres duplicados entre contactos (causa de asociación ambigua)
+  const porPrimerNombre = {};
+  contactos.forEach(c => {
+    const k = normalizarNombre(c.nombre);
+    if (!k) return;
+    if (!porPrimerNombre[k]) porPrimerNombre[k] = [];
+    porPrimerNombre[k].push(c);
+  });
+  const ambiguos = Object.entries(porPrimerNombre).filter(([_,cs]) => cs.length > 1);
+
+  // Detectar teléfonos duplicados entre distintos contactos
+  const porTel = {};
+  contactos.forEach(c => {
+    const t = normalizarTelAR(c.tel||'');
+    if (!t) return;
+    if (!porTel[t]) porTel[t] = [];
+    porTel[t].push(c);
+  });
+  const telDup = Object.entries(porTel).filter(([_,cs]) => cs.length > 1);
+
+  if (!ambiguos.length && !telDup.length) {
+    alert('✅ No se encontraron contactos ambiguos ni teléfonos duplicados.');
+    return;
+  }
+
+  let msg = '';
+  if (ambiguos.length) {
+    msg += '⚠️ Nombres que empiezan igual (pueden confundirse al buscar por primera palabra):\n\n';
+    ambiguos.forEach(([nombre, cs]) => {
+      msg += '"' + nombre + '": ' + cs.map(c=>c.nombre+' ('+c.tel+')').join(' / ') + '\n';
+    });
+    msg += '\n';
+  }
+  if (telDup.length) {
+    msg += '📱 Contactos con el mismo teléfono:\n\n';
+    telDup.forEach(([tel, cs]) => {
+      msg += tel + ': ' + cs.map(c=>c.nombre).join(' / ') + '\n';
+    });
+  }
+  alert(msg);
 }
 
 async function importarContactosDrive(){
