@@ -45,31 +45,39 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
 .slot.paid{background:rgba(0,229,160,.05)}
 
 .row{display:flex;align-items:center;gap:8px;padding:10px 14px}
+/* Grid compartido: hora | nombre | wa | cancha | precio | metodo | chk | del
+   Mismas columnas en head y alumno para que todo quede alineado */
+.row.head, .row.alumno{
+  display:grid;
+  grid-template-columns: 46px 1fr 26px 26px 72px 92px 24px 22px;
+  align-items:center; gap:8px; padding:10px 14px;
+}
 .row.head{padding-bottom:6px}
 .row.head.grupal{padding-bottom:2px}
-.row.alumno{padding:6px 14px 6px 46px}
-.hora{width:52px;flex-shrink:0;font-size:12.5px;color:var(--t2);font-weight:700}
-.texto{flex:1;font-size:13.5px;background:transparent;border:none;color:var(--t1);outline:none;border-bottom:1px dashed transparent;min-width:0}
+.row.alumno{padding:6px 14px}
+.hora{grid-column:1; font-size:12.5px;color:var(--t2);font-weight:700}
+.texto{grid-column:2; font-size:13.5px;background:transparent;border:none;color:var(--t1);outline:none;border-bottom:1px dashed transparent;min-width:0;width:100%}
 .texto:focus{border-bottom:1px dashed var(--acc2)}
 .texto.solo{font-size:13.5px}
-.nota{font-size:10.5px;color:var(--am);display:block;margin-top:2px;margin-left:60px}
-.cancha-badge{flex-shrink:0;width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;cursor:pointer;user-select:none}
+.nota{font-size:10.5px;color:var(--am);display:block;margin-top:2px;grid-column:2}
+.cancha-badge{grid-column:4; width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;cursor:pointer;user-select:none}
 .cancha-badge.C{background:rgba(0,207,255,.15);color:var(--acc2)}
 .cancha-badge.D{background:rgba(255,182,72,.15);color:var(--am)}
 .cancha-badge.none{background:rgba(255,255,255,.06);color:var(--t2)}
-.precio{width:76px;flex-shrink:0;background:var(--s2);border:1px solid var(--s3);border-radius:8px;color:var(--t1);font-size:12.5px;padding:6px 6px;text-align:right;outline:none}
+.precio{grid-column:5; width:100%;background:var(--s2);border:1px solid var(--s3);border-radius:8px;color:var(--t1);font-size:12.5px;padding:6px 6px;text-align:right;outline:none}
 .precio::placeholder{color:var(--t2)}
-.metodo{width:96px;flex-shrink:0;background:var(--s2);border:1px solid var(--s3);border-radius:8px;color:var(--t1);font-size:11.5px;padding:6px 4px;outline:none}
+.metodo{grid-column:6; width:100%;background:var(--s2);border:1px solid var(--s3);border-radius:8px;color:var(--t1);font-size:11.5px;padding:6px 4px;outline:none}
 .metodo:invalid,.metodo option[value=""]{color:var(--t2)}
-.chk{flex-shrink:0;width:24px;height:24px;border-radius:7px;border:2px solid var(--s3);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--acc);font-weight:900}
+.chk{grid-column:7; width:24px;height:24px;border-radius:7px;border:2px solid var(--s3);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--acc);font-weight:900}
 .chk.on{background:var(--acc);border-color:var(--acc);color:#04120c}
 .chk.general{border-color:var(--acc2);color:var(--acc2)}
 .chk.general.on{background:var(--acc);border-color:var(--acc);color:#04120c}
-.grupal-lbl{font-size:11px;color:var(--t2);font-weight:700;letter-spacing:.3px}
+.grupal-lbl{grid-column:2; font-size:11px;color:var(--t2);font-weight:700;letter-spacing:.3px}
 
-.btn-del{flex-shrink:0;width:22px;height:22px;border-radius:7px;border:none;background:transparent;color:var(--t2);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.btn-del{grid-column:8; width:22px;height:22px;border-radius:7px;border:none;background:transparent;color:var(--t2);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .btn-del:hover{color:var(--rd)}
-.btn-wa{flex-shrink:0;width:22px;height:22px;border-radius:7px;background:rgba(0,229,160,.12);text-decoration:none;font-size:12px;display:inline-flex;align-items:center;justify-content:center;margin-left:4px}
+.btn-wa{grid-column:3; width:24px;height:24px;border-radius:7px;background:rgba(0,229,160,.12);text-decoration:none;font-size:12px;display:inline-flex;align-items:center;justify-content:center;margin:0 auto}
+.nombre-wrap{grid-column:2; min-width:0; display:flex; flex-direction:column}
 
 .addrow{display:flex;align-items:center;gap:6px;padding:10px 14px;flex-wrap:wrap}
 .addrow input,.addrow select{background:var(--s2);border:1px solid var(--s3);border-radius:8px;color:var(--t1);font-size:12px;padding:6px 8px;outline:none}
@@ -90,12 +98,16 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
 .backupbar button:active{transform:scale(.97)}
 
 @media(max-width:420px){
-  .precio{width:56px;font-size:11px}
-  .metodo{width:74px;font-size:10px}
+  .row.head, .row.alumno{grid-template-columns: 38px 1fr 22px 22px 58px 74px 22px 20px; gap:5px; padding-left:10px; padding-right:10px}
+  .precio{font-size:10.5px; padding:5px 4px}
+  .metodo{font-size:10px; padding:5px 2px}
   .texto{font-size:12.5px}
-  .row.alumno{padding-left:34px;flex-wrap:wrap}
-  .nota{margin-left:44px}
-  .add-alumno-row{padding-left:34px}
+  .hora{font-size:11px}
+  .cancha-badge{width:22px;height:22px;font-size:10px}
+  .chk{width:22px;height:22px;font-size:12px}
+  .btn-del{width:20px;height:20px;font-size:13px}
+  .btn-wa{width:22px;height:22px}
+  .add-alumno-row{padding-left:10px}
 }
 </style>
 </head>
@@ -381,10 +393,8 @@ function render(){
         <div class="slot ${pagado?'paid':''}">
           <div class="row head ${esGrupal?'grupal':''}">
             <div class="hora">${cl.h}</div>
-            <div style="flex:1;min-width:0">
-              ${headNombre}
-              ${cl.nota ? `<span class="nota">${cl.nota}</span>` : ''}
-            </div>
+            ${headNombre}
+            ${cl.nota ? `<span class="nota">${cl.nota}</span>` : ''}
             <div class="cancha-badge ${canchaClass}" onclick="toggleCancha('${cl.id}')" title="Tocar para cambiar cancha">${canchaTxt}</div>
             <input class="precio" type="number" placeholder="$" value="${cl.p||''}" onchange="setPrecio('${cl.id}', this.value)">
             ${checkHead}
