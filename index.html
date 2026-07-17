@@ -379,10 +379,12 @@ function render(){
 
       const filasAlumnos = esGrupal ? cl.alumnos.map((nombre, idx) => {
         const p = estaPagado(pagosCl, idx);
+        const monto = (cl.montos && cl.montos[idx]) || '';
         return `
           <div class="row alumno">
             <input class="texto" value="${nombre.replace(/"/g,'&quot;')}" onchange="setAlumno('${cl.id}',${idx},this.value)">
             ${botonWA(nombre)}
+            <input class="precio" type="number" placeholder="$" value="${monto}" title="Subtotal de ${nombre}" onchange="setMontoAlumno('${cl.id}',${idx},this.value)">
             ${selectMetodo(weekKey, cl.id, idx, metodoDe(pagosCl,idx))}
             <div class="chk ${p?'on':''}" onclick="togglePago('${weekKey}','${cl.id}',${idx})">${p?'✓':''}</div>
             <button class="btn-del" title="Quitar alumno" onclick="eliminarAlumno('${cl.id}',${idx})">×</button>
@@ -447,6 +449,17 @@ function setAlumno(id, idx, val){
 }
 function setPrecio(id, val){
   DIAS.forEach(d => d.clases.forEach(cl => { if (cl.id===id) cl.p = parseFloat(val)||0; }));
+  guardarTemplate();
+  render();
+}
+function setMontoAlumno(id, idx, val){
+  DIAS.forEach(d => d.clases.forEach(cl => {
+    if (cl.id!==id) return;
+    if (!cl.montos) cl.montos = [];
+    cl.montos[idx] = parseFloat(val)||0;
+    // El precio total de la clase pasa a ser la suma de los subtotales
+    cl.p = cl.montos.reduce((s,m)=>s+(m||0),0);
+  }));
   guardarTemplate();
   render();
 }
