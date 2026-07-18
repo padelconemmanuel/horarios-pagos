@@ -33,16 +33,48 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
 .sum-card.ok b{color:var(--acc)}
 .sum-card.pend b{color:var(--am)}
 
-.day{background:linear-gradient(160deg,var(--s1),var(--s2));border:1px solid rgba(255,255,255,.07);border-left:4px solid var(--dc,var(--acc));border-radius:18px;margin-bottom:14px;overflow:hidden}
+/* ── Tarjetas por día ── */
+.day{
+  background:linear-gradient(160deg,var(--s1),var(--s2));
+  border:1px solid rgba(255,255,255,.06);
+  border-left:4px solid var(--dc,var(--acc));
+  border-radius:18px;
+  margin-bottom:16px;
+  overflow:hidden;
+  box-shadow:0 4px 18px rgba(0,0,0,.18);
+}
+/* Fondo alternado sutil entre días consecutivos */
+.day:nth-of-type(even){background:linear-gradient(160deg,#0d1424,#141d38)}
+.day:nth-of-type(odd){background:linear-gradient(160deg,var(--s1),var(--s2))}
+
 .day-h{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer}
 .day-h h2{font-size:15px;font-weight:800;color:var(--dc,var(--t1))}
 .day-h .day-tot{font-size:12px;color:var(--t2)}
 .day-body{border-top:1px solid rgba(255,255,255,.06)}
 .day-body.collapsed{display:none}
 
-.slot{border-bottom:1px solid rgba(255,255,255,.05)}
+/* ── Encabezado de columnas, estilo tabla ── */
+.table-head{
+  display:grid;
+  grid-template-columns: 46px 1fr 26px 26px 72px 92px 24px 22px;
+  gap:8px; padding:8px 14px;
+  font-size:10.5px; font-weight:800; letter-spacing:.4px; text-transform:uppercase;
+  color:var(--t2);
+  background:rgba(255,255,255,.02);
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.table-head span{grid-column:2}
+.table-head .th-precio{grid-column:5; text-align:right}
+.table-head .th-metodo{grid-column:6}
+.table-head .th-pago{grid-column:7; text-align:center}
+
+/* ── Filas: zebra striping + bordes suaves ── */
+.slot{border-bottom:1px solid rgba(255,255,255,.045)}
 .slot:last-child{border-bottom:none}
-.slot.paid{background:rgba(0,229,160,.05)}
+.slot:nth-of-type(even){background:rgba(255,255,255,.015)}
+.slot.paid{background:rgba(0,229,160,.06)}
+.slot.paid:nth-of-type(even){background:rgba(0,229,160,.09)}
+.row.alumno{background:rgba(255,255,255,.012)}
 
 .row{display:flex;align-items:center;gap:8px;padding:10px 14px}
 /* Grid compartido: hora | nombre | wa | cancha | precio | metodo | chk | del
@@ -98,7 +130,7 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
 .backupbar button:active{transform:scale(.97)}
 
 @media(max-width:420px){
-  .row.head, .row.alumno{grid-template-columns: 38px 1fr 22px 22px 58px 74px 22px 20px; gap:5px; padding-left:10px; padding-right:10px}
+  .row.head, .row.alumno, .table-head{grid-template-columns: 38px 1fr 22px 22px 58px 74px 22px 20px; gap:5px; padding-left:10px; padding-right:10px}
   .precio{font-size:10.5px; padding:5px 4px}
   .metodo{font-size:10px; padding:5px 2px}
   .texto{font-size:12.5px}
@@ -424,6 +456,12 @@ function render(){
           <div class="day-tot">${d.clases.length} clases · ${fmtMoney(totalDia)} cobrado</div>
         </div>
         <div class="day-body ${colapsado?'collapsed':''}" id="body-${d.id}">
+          ${d.clases.length ? `<div class="table-head">
+            <span>Alumno</span>
+            <span class="th-precio">$</span>
+            <span class="th-metodo">Método</span>
+            <span class="th-pago">Pago</span>
+          </div>` : ''}
           ${filas}
           <div class="add-clase-row">
             <div class="addrow">
