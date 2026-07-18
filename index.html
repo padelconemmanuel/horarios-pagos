@@ -430,10 +430,7 @@ function render(){
             ${headNombre}
             ${cl.nota ? `<span class="nota">${cl.nota}</span>` : ''}
             <div class="cancha-badge ${canchaClass}" onclick="toggleCancha('${cl.id}')" title="Tocar para cambiar cancha">${canchaTxt}</div>
-            ${esGrupal
-              ? `<input class="precio" type="number" placeholder="$/u" title="Cobro por persona" value="${cl.pp||''}" onchange="setPrecioPorPersona('${cl.id}', this.value)">`
-              : `<input class="precio" type="number" placeholder="$" title="Cobro" value="${cl.p||''}" onchange="setPrecio('${cl.id}', this.value)">`
-            }
+            <input class="precio" type="number" placeholder="$/pers" title="Cobro por persona" value="${cl.pp||''}" onchange="setPrecioPorPersona('${cl.id}', this.value)">
             ${checkHead}
             <button class="btn-del" title="Eliminar clase" onclick="eliminarClase('${cl.id}')">🗑</button>
           </div>
