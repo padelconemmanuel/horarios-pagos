@@ -504,13 +504,11 @@ function setMontoAlumno(id, idx, val){
   render();
 }
 function setPrecioPorPersona(id, val){
+  // Solo un recordatorio de cuánto cobrar — NO toca los pagos individuales de cada alumno
   const pp = parseFloat(val)||0;
   DIAS.forEach(d => d.clases.forEach(cl => {
     if (cl.id!==id) return;
     cl.pp = pp;
-    // Aplica el mismo cobro a todos los alumnos de la clase y recalcula el total
-    cl.montos = cl.alumnos.map(() => pp);
-    cl.p = pp * cl.alumnos.length;
   }));
   guardarTemplate();
   render();
