@@ -88,6 +88,13 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
 .row.head.grupal{padding-bottom:2px}
 .row.alumno{padding:6px 14px}
 .hora{grid-column:1; font-size:12.5px;color:var(--t2);font-weight:700}
+.chk-rec{
+  grid-column:1; width:30px;height:30px;border-radius:9px;
+  border:2px solid var(--rd); background:transparent; color:var(--rd);
+  font-weight:900; font-size:16px; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; margin:4px auto 0;
+}
+.chk-rec.on{background:var(--rd); color:#2b0510}
 .texto{grid-column:2; font-size:13.5px;background:transparent;border:none;color:var(--t1);outline:none;border-bottom:1px dashed transparent;min-width:0;width:100%}
 .texto:focus{border-bottom:1px dashed var(--acc2)}
 .texto.solo{font-size:13.5px}
@@ -135,6 +142,7 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
   .metodo{font-size:10px; padding:5px 2px}
   .texto{font-size:12.5px}
   .hora{font-size:11px}
+  .chk-rec{width:24px;height:24px;font-size:13px}
   .cancha-badge{width:22px;height:22px;font-size:10px}
   .chk{width:22px;height:22px;font-size:12px}
   .btn-del{width:20px;height:20px;font-size:13px}
@@ -429,6 +437,7 @@ function render(){
         <div class="slot ${pagado?'paid':''}">
           <div class="row head ${esGrupal?'grupal':''}">
             <div class="hora">${cl.h}</div>
+            <div class="chk-rec ${cl.rec?'on':''}" title="Recordatorio" onclick="toggleRecordatorio('${cl.id}')">${cl.rec?'✓':''}</div>
             ${headNombre}
             ${cl.nota ? `<span class="nota">${cl.nota}</span>` : ''}
             <div class="cancha-badge ${canchaClass}" onclick="toggleCancha('${cl.id}')" title="Tocar para cambiar cancha">${canchaTxt}</div>
@@ -500,6 +509,11 @@ function setMontoAlumno(id, idx, val){
     // El precio total de la clase pasa a ser la suma de los subtotales
     cl.p = cl.montos.reduce((s,m)=>s+(m||0),0);
   }));
+  guardarTemplate();
+  render();
+}
+function toggleRecordatorio(id){
+  DIAS.forEach(d => d.clases.forEach(cl => { if (cl.id===id) cl.rec = !cl.rec; }));
   guardarTemplate();
   render();
 }
