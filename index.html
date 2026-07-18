@@ -401,27 +401,29 @@ function render(){
       const canchaClass = cl.c === 'C' ? 'C' : cl.c === 'D' ? 'D' : 'none';
       const canchaTxt = cl.c === 'C' ? 'C' : cl.c === 'D' ? 'D' : '?';
 
+      // Head: para grupal muestra "Grupo (N) · total"; para individual queda vacío
+      // (el nombre y el pago del único alumno se editan en la fila de abajo, igual que en grupales)
       const headNombre = esGrupal
         ? `<span class="grupal-lbl">Grupo (${cl.alumnos.length})${cl.p?` · <span style="color:var(--acc)">${fmtMoney(cl.p)}</span> total`:''}</span>`
-        : `<input class="texto solo" value="${cl.alumnos[0].replace(/"/g,'&quot;')}" onchange="setAlumno('${cl.id}',0,this.value)">${botonWA(cl.alumnos[0])}`;
+        : `<span class="grupal-lbl">${cl.p?`<span style="color:var(--acc)">${fmtMoney(cl.p)}</span> total`:''}</span>`;
 
-      const checkHead = esGrupal
-        ? `<div class="chk general ${todosPagados?'on':''}" title="Tildar/destildar a todos" onclick="toggleGeneral('${weekKey}','${cl.id}')">${todosPagados?'✓':''}</div>`
-        : `${selectMetodo(weekKey, cl.id, 0, metodoDe(pagosCl,0))}<div class="chk ${pagado?'on':''}" onclick="togglePago('${weekKey}','${cl.id}',0)">${pagado?'✓':''}</div>`;
+      // El check de cabecera siempre es el toggle general (tilda/destilda a todos los alumnos de la clase)
+      const checkHead = `<div class="chk general ${todosPagados?'on':''}" title="Tildar/destildar a todos" onclick="toggleGeneral('${weekKey}','${cl.id}')">${todosPagados?'✓':''}</div>`;
 
-      const filasAlumnos = esGrupal ? cl.alumnos.map((nombre, idx) => {
+      // Fila(s) de alumno: siempre se muestran, sea clase individual o grupal
+      const filasAlumnos = cl.alumnos.map((nombre, idx) => {
         const p = estaPagado(pagosCl, idx);
         const monto = (cl.montos && cl.montos[idx]) || '';
         return `
           <div class="row alumno">
             <input class="texto" value="${nombre.replace(/"/g,'&quot;')}" onchange="setAlumno('${cl.id}',${idx},this.value)">
             ${botonWA(nombre)}
-            <input class="precio" type="number" placeholder="$" value="${monto}" title="Subtotal de ${nombre}" onchange="setMontoAlumno('${cl.id}',${idx},this.value)">
+            <input class="precio" type="number" placeholder="$" value="${monto}" title="Pago de ${nombre}" onchange="setMontoAlumno('${cl.id}',${idx},this.value)">
             ${selectMetodo(weekKey, cl.id, idx, metodoDe(pagosCl,idx))}
             <div class="chk ${p?'on':''}" onclick="togglePago('${weekKey}','${cl.id}',${idx})">${p?'✓':''}</div>
-            <button class="btn-del" title="Quitar alumno" onclick="eliminarAlumno('${cl.id}',${idx})">×</button>
+            ${esGrupal ? `<button class="btn-del" title="Quitar alumno" onclick="eliminarAlumno('${cl.id}',${idx})">×</button>` : '<span></span>'}
           </div>`;
-      }).join('') : '';
+      }).join('');
 
       return `
         <div class="slot ${pagado?'paid':''}">
