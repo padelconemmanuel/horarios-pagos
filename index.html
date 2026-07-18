@@ -370,7 +370,7 @@ function render(){
       const canchaTxt = cl.c === 'C' ? 'C' : cl.c === 'D' ? 'D' : '?';
 
       const headNombre = esGrupal
-        ? `<span class="grupal-lbl">Grupo (${cl.alumnos.length})</span>`
+        ? `<span class="grupal-lbl">Grupo (${cl.alumnos.length})${cl.p?` · <span style="color:var(--acc)">${fmtMoney(cl.p)}</span> total`:''}</span>`
         : `<input class="texto solo" value="${cl.alumnos[0].replace(/"/g,'&quot;')}" onchange="setAlumno('${cl.id}',0,this.value)">${botonWA(cl.alumnos[0])}`;
 
       const checkHead = esGrupal
@@ -398,7 +398,10 @@ function render(){
             ${headNombre}
             ${cl.nota ? `<span class="nota">${cl.nota}</span>` : ''}
             <div class="cancha-badge ${canchaClass}" onclick="toggleCancha('${cl.id}')" title="Tocar para cambiar cancha">${canchaTxt}</div>
-            <input class="precio" type="number" placeholder="$" value="${cl.p||''}" onchange="setPrecio('${cl.id}', this.value)">
+            ${esGrupal
+              ? `<input class="precio" type="number" placeholder="$/u" title="Cobro por persona" value="${cl.pp||''}" onchange="setPrecioPorPersona('${cl.id}', this.value)">`
+              : `<input class="precio" type="number" placeholder="$" title="Cobro" value="${cl.p||''}" onchange="setPrecio('${cl.id}', this.value)">`
+            }
             ${checkHead}
             <button class="btn-del" title="Eliminar clase" onclick="eliminarClase('${cl.id}')">🗑</button>
           </div>
@@ -459,6 +462,18 @@ function setMontoAlumno(id, idx, val){
     cl.montos[idx] = parseFloat(val)||0;
     // El precio total de la clase pasa a ser la suma de los subtotales
     cl.p = cl.montos.reduce((s,m)=>s+(m||0),0);
+  }));
+  guardarTemplate();
+  render();
+}
+function setPrecioPorPersona(id, val){
+  const pp = parseFloat(val)||0;
+  DIAS.forEach(d => d.clases.forEach(cl => {
+    if (cl.id!==id) return;
+    cl.pp = pp;
+    // Aplica el mismo cobro a todos los alumnos de la clase y recalcula el total
+    cl.montos = cl.alumnos.map(() => pp);
+    cl.p = pp * cl.alumnos.length;
   }));
   guardarTemplate();
   render();
