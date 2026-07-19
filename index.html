@@ -26,6 +26,7 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
 .weekrange{flex:1;text-align:center;font-weight:800;font-size:15px}
 .weekrange span{display:block;font-size:11.5px;color:var(--t2);font-weight:500;margin-top:2px}
 
+.summary-lbl{font-size:12px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.4px;margin:0 0 8px 2px}
 .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
 .sum-card{background:var(--s1);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:12px;text-align:center}
 .sum-card b{display:block;font-size:18px;font-weight:900}
@@ -172,10 +173,18 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
     <button onclick="cambiarSemana(1)">▶</button>
   </div>
 
+  <div class="summary-lbl">📅 Total de la semana</div>
   <div class="summary">
     <div class="sum-card"><b id="s-total">0</b><span>clases</span></div>
     <div class="sum-card ok"><b id="s-cobrado">$0</b><span>cobrado</span></div>
     <div class="sum-card pend"><b id="s-pendiente">$0</b><span>pendiente</span></div>
+  </div>
+
+  <div class="summary-lbl">🗓️ Total del mes <span id="mes-nombre"></span></div>
+  <div class="summary">
+    <div class="sum-card"><b id="m-total">0</b><span>clases</span></div>
+    <div class="sum-card ok"><b id="m-cobrado">$0</b><span>cobrado</span></div>
+    <div class="sum-card pend"><b id="m-pendiente">$0</b><span>pendiente</span></div>
   </div>
 
   <div id="dias"></div>
@@ -488,6 +497,31 @@ function render(){
   document.getElementById('s-total').textContent = totalClases;
   document.getElementById('s-cobrado').textContent = fmtMoney(cobrado);
   document.getElementById('s-pendiente').textContent = fmtMoney(pendiente);
+
+  // ── Totales del mes (recorre TODAS las semanas guardadas, agrupando cada
+  //    clase por la fecha real que le corresponde, no por semana completa) ──
+  const targetYM = fechaKey(semanaActual).slice(0,7); // "YYYY-MM" del mes de la semana que se está viendo
+  let mesClases = 0, mesCobrado = 0, mesPendiente = 0;
+  Object.keys(pagosAll).forEach(wk => {
+    const monday = new Date(wk + 'T00:00:00');
+    DIAS.forEach((d, i) => {
+      const fecha = new Date(monday.getTime() + i*86400000);
+      if (fechaKey(fecha).slice(0,7) !== targetYM) return;
+      const pagosSem = pagosAll[wk] || {};
+      d.clases.forEach(cl => {
+        mesClases++;
+        const pagosCl = pagosSem[cl.id] || {};
+        const todos = cl.alumnos.every((_, idx) => estaPagado(pagosCl, idx));
+        const precio = cl.p || 0;
+        if (todos) mesCobrado += precio; else mesPendiente += precio;
+      });
+    });
+  });
+  const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  document.getElementById('mes-nombre').textContent = '· ' + MESES[semanaActual.getMonth()] + ' ' + semanaActual.getFullYear();
+  document.getElementById('m-total').textContent = mesClases;
+  document.getElementById('m-cobrado').textContent = fmtMoney(mesCobrado);
+  document.getElementById('m-pendiente').textContent = fmtMoney(mesPendiente);
 }
 
 function toggleDia(id){ collapsedDias[id] = !collapsedDias[id]; render(); }
