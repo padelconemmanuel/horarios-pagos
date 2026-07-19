@@ -498,25 +498,31 @@ function render(){
   document.getElementById('s-cobrado').textContent = fmtMoney(cobrado);
   document.getElementById('s-pendiente').textContent = fmtMoney(pendiente);
 
-  // ── Totales del mes (recorre TODAS las semanas guardadas, agrupando cada
-  //    clase por la fecha real que le corresponde, no por semana completa) ──
-  const targetYM = fechaKey(semanaActual).slice(0,7); // "YYYY-MM" del mes de la semana que se está viendo
+  // ── Totales del mes: recorre TODOS los días reales del mes calendario
+  //    (contempla meses con 4 o incluso 5 repeticiones del mismo día de semana),
+  //    sin depender de si esa semana puntual ya fue "tocada" en el sistema.
+  const anioRef = semanaActual.getFullYear();
+  const mesRef  = semanaActual.getMonth();
+  const primerDiaMes = new Date(anioRef, mesRef, 1);
+  const ultimoDiaMes = new Date(anioRef, mesRef + 1, 0);
   let mesClases = 0, mesCobrado = 0, mesPendiente = 0;
-  Object.keys(pagosAll).forEach(wk => {
-    const monday = new Date(wk + 'T00:00:00');
-    DIAS.forEach((d, i) => {
-      const fecha = new Date(monday.getTime() + i*86400000);
-      if (fechaKey(fecha).slice(0,7) !== targetYM) return;
-      const pagosSem = pagosAll[wk] || {};
-      d.clases.forEach(cl => {
-        mesClases++;
-        const pagosCl = pagosSem[cl.id] || {};
-        const todos = cl.alumnos.every((_, idx) => estaPagado(pagosCl, idx));
-        const precio = cl.p || 0;
-        if (todos) mesCobrado += precio; else mesPendiente += precio;
-      });
+
+  for (let dia = new Date(primerDiaMes); dia <= ultimoDiaMes; dia.setDate(dia.getDate()+1)) {
+    const diaSemana = dia.getDay(); // 0=Dom, 1=Lun ... 6=Sáb
+    if (diaSemana === 0) continue;  // no hay clases los domingos
+    const dIdx = diaSemana - 1;     // Lun(1)->0 ... Sáb(6)->5, igual que el orden de DIAS
+    const dTemplate = DIAS[dIdx];
+    if (!dTemplate) continue;
+    const wk = fechaKey(lunesDe(dia));
+    const pagosSem = pagosAll[wk] || {};
+    dTemplate.clases.forEach(cl => {
+      mesClases++;
+      const pagosCl = pagosSem[cl.id] || {};
+      const todos = cl.alumnos.every((_, idx) => estaPagado(pagosCl, idx));
+      const precio = cl.p || 0;
+      if (todos) mesCobrado += precio; else mesPendiente += precio;
     });
-  });
+  }
   const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   document.getElementById('mes-nombre').textContent = '· ' + MESES[semanaActual.getMonth()] + ' ' + semanaActual.getFullYear();
   document.getElementById('m-total').textContent = mesClases;
