@@ -114,6 +114,22 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
 .chk.general.on{background:var(--acc);border-color:var(--acc);color:#04120c}
 .grupal-lbl{grid-column:2; font-size:11px;color:var(--t2);font-weight:700;letter-spacing:.3px}
 
+.comp-box{grid-column:4; width:26px;height:26px;border-radius:8px;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;background:var(--s3);
+  border:1px solid rgba(255,255,255,.08); cursor:pointer;font-size:13px;color:var(--t2)}
+.comp-box img{width:100%;height:100%;object-fit:cover}
+.comp-box.has{border-color:var(--acc)}
+
+.comp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:999;
+  display:none;align-items:center;justify-content:center;padding:24px}
+.comp-overlay.on{display:flex}
+.comp-overlay img{max-width:100%;max-height:80vh;border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.comp-close{position:absolute;top:18px;right:18px;background:rgba(255,255,255,.15);color:#fff;
+  border:none;border-radius:50%;width:38px;height:38px;font-size:18px;cursor:pointer}
+.comp-replace{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);
+  background:var(--acc);color:#04120c;border:none;border-radius:24px;padding:10px 20px;
+  font-size:13px;font-weight:800;cursor:pointer}
+
 .btn-del{grid-column:8; width:22px;height:22px;border-radius:7px;border:none;background:transparent;color:var(--t2);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .btn-del:hover{color:var(--rd)}
 .btn-wa{grid-column:3; width:24px;height:24px;border-radius:7px;background:rgba(0,229,160,.12);text-decoration:none;font-size:12px;display:inline-flex;align-items:center;justify-content:center;margin:0 auto}
@@ -148,6 +164,7 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
   .chk{width:22px;height:22px;font-size:12px}
   .btn-del{width:20px;height:20px;font-size:13px}
   .btn-wa{width:22px;height:22px}
+  .comp-box{width:22px;height:22px;font-size:11px}
   .add-alumno-row{padding-left:10px}
 }
 </style>
@@ -431,10 +448,12 @@ function render(){
       const filasAlumnos = cl.alumnos.map((nombre, idx) => {
         const p = estaPagado(pagosCl, idx);
         const monto = (cl.montos && cl.montos[idx]) || '';
+        const comp  = cl.comprobantes && cl.comprobantes[idx];
         return `
           <div class="row alumno">
             <input class="texto" value="${nombre.replace(/"/g,'&quot;')}" onchange="setAlumno('${cl.id}',${idx},this.value)">
             ${botonWA(nombre)}
+            <div class="comp-box ${comp?'has':''}" title="${comp?'Ver comprobante':'Adjuntar comprobante'}" onclick="event.stopPropagation();attachComprobante('${cl.id}',${idx})">${comp?`<img src="${comp}">`:'📎'}</div>
             <input class="precio" type="number" placeholder="$" value="${monto}" title="Pago de ${nombre}" onchange="setMontoAlumno('${cl.id}',${idx},this.value)">
             ${selectMetodo(weekKey, cl.id, idx, metodoDe(pagosCl,idx))}
             <div class="chk ${p?'on':''}" onclick="togglePago('${weekKey}','${cl.id}',${idx})">${p?'✓':''}</div>
@@ -963,8 +982,49 @@ async function importarContactosDrive(){
   }
 }
 
+// ── Comprobante de pago por alumno ──
+let _compTarget = null;
+function attachComprobante(id, idx){
+  const cl = DIAS.flatMap(d=>d.clases).find(c=>c.id===id);
+  const comp = cl && cl.comprobantes && cl.comprobantes[idx];
+  _compTarget = { id, idx };
+  if (comp) {
+    document.getElementById('comp-overlay-img').src = comp;
+    document.getElementById('comp-overlay').classList.add('on');
+  } else {
+    document.getElementById('comp-input-global').click();
+  }
+}
+function onComprobanteFile(input){
+  const file = input.files[0];
+  if (!file || !_compTarget) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const data = e.target.result;
+    DIAS.forEach(d => d.clases.forEach(cl => {
+      if (cl.id !== _compTarget.id) return;
+      if (!cl.comprobantes) cl.comprobantes = [];
+      cl.comprobantes[_compTarget.idx] = data;
+    }));
+    guardarTemplate();
+    render();
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+function cerrarComprobante(){
+  document.getElementById('comp-overlay').classList.remove('on');
+}
+
 cargarTemplate();
 render();
 </script>
+
+<input type="file" id="comp-input-global" accept="image/*" capture="environment" style="display:none" onchange="onComprobanteFile(this)">
+<div class="comp-overlay" id="comp-overlay">
+  <button class="comp-close" onclick="cerrarComprobante()">✕</button>
+  <img id="comp-overlay-img" src="">
+  <button class="comp-replace" onclick="document.getElementById('comp-input-global').click()">🔄 Reemplazar</button>
+</div>
 </body>
 </html>
