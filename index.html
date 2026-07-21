@@ -181,6 +181,7 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
     <button id="btn-drive-import" onclick="importarBackupDrive()">⬇️ Importar desde Google Drive</button>
     <button id="btn-contactos" onclick="importarContactosDrive()">📇 Traer contactos</button>
     <button id="btn-verificar-contactos" onclick="verificarContactosAmbiguos()">⚠️ Verificar contactos</button>
+    <button id="btn-export-app" onclick="exportarPagosParaApp()">📤 Exportar pagos a la app</button>
   </div>
 
   <div class="weeknav">
@@ -769,6 +770,82 @@ async function _getCarpetaBackupId(token){
   } catch(e) { console.warn('Buscar carpeta Drive:', e.message); }
   return null;
 }
+
+async function exportarPagosParaApp(){
+  const btn = document.getElementById('btn-export-app');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Recolectando...'; }
+  try {
+    const weekKey = fechaKey(semanaActual);
+    const pagosAll = cargarPagos();
+    const pagosSemana = pagosAll[weekKey] || {};
+
+    const entradas = [];
+    DIAS.forEach((d, i) => {
+      const fechaClase = new Date(semanaActual.getTime() + i*86400000);
+      d.clases.forEach(cl => {
+        const pagosCl = pagosSemana[cl.id] || {};
+        cl.alumnos.forEach((nombre, idx) => {
+          const monto = (cl.montos && cl.montos[idx]) || 0;
+          if (!monto) return; // solo exportamos filas con monto cargado
+          entradas.push({
+            nombre,
+            monto,
+            metodo: metodoDe(pagosCl, idx) || '',
+            estado: estaPagado(pagosCl, idx) ? 'pagado' : 'pendiente',
+            fecha: fechaKey(fechaClase),
+            comprobante: (cl.comprobantes && cl.comprobantes[idx]) || null,
+          });
+        });
+      });
+    });
+
+    if (!entradas.length) {
+      toast_ep('No hay montos cargados esta semana para exportar');
+      if (btn) { btn.disabled = false; btn.textContent = '📤 Exportar pagos a la app'; }
+      return;
+    }
+
+    let token = await _getDriveToken();
+    const carpetaId = await _getCarpetaBackupId(token);
+    if (btn) btn.textContent = '⏳ Subiendo...';
+
+    const fileName = 'horario_pagos_pendientes.json';
+    const q = encodeURIComponent(`name = '${fileName}' and trashed=false${carpetaId?` and '${carpetaId}' in parents`:''}`);
+    let existingId = null;
+    try {
+      const sr = await _fetchConTimeout(
+        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=1`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (sr.ok) existingId = (await sr.json()).files?.[0]?.id || null;
+    } catch(e) {}
+
+    const contenido = JSON.stringify({ version:1, generado: new Date().toISOString(), entradas }, null, 2);
+    const boundary = 'hpx' + Date.now();
+    const metaObj  = { name: fileName, mimeType: 'application/json' };
+    if (!existingId && carpetaId) metaObj.parents = [carpetaId];
+    const meta = JSON.stringify(metaObj);
+    const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${contenido}\r\n--${boundary}--`;
+    const uploadUrl = existingId
+      ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart`
+      : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+
+    const res = await _fetchConTimeout(uploadUrl, {
+      method: existingId ? 'PATCH' : 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary="${boundary}"` },
+      body
+    }, 30000);
+
+    if (!res.ok) throw new Error('Error ' + res.status);
+    toast_ep('✅ ' + entradas.length + ' pago(s) exportado(s) — ahora importalos desde la app principal');
+  } catch(e) {
+    console.error('exportarPagosParaApp:', e);
+    toast_ep('Error al exportar: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📤 Exportar pagos a la app'; }
+  }
+}
+function toast_ep(msg){ alert(msg); }
 
 async function subirBackupDrive(){
   const btn = document.getElementById('btn-drive');
