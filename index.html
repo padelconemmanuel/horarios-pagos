@@ -177,11 +177,11 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
   <div class="legend"><span><b style="color:var(--acc2)">C</b> = cancha cubierta</span><span><b style="color:var(--am)">D</b> = cancha descubierta</span></div>
 
   <div class="backupbar">
-    <button id="btn-drive" onclick="subirBackupDrive()">☁️ Subir a Google Drive</button>
+    <button id="btn-drive" onclick="subirBackupDrive()">☁️ Guardar y enviar pagos a la app</button>
     <button id="btn-drive-import" onclick="importarBackupDrive()">⬇️ Importar desde Google Drive</button>
     <button id="btn-contactos" onclick="importarContactosDrive()">📇 Traer contactos</button>
     <button id="btn-verificar-contactos" onclick="verificarContactosAmbiguos()">⚠️ Verificar contactos</button>
-    <button id="btn-export-app" onclick="exportarPagosParaApp()">📤 Exportar pagos a la app</button>
+
   </div>
 
   <div class="weeknav">
@@ -771,79 +771,63 @@ async function _getCarpetaBackupId(token){
   return null;
 }
 
-async function exportarPagosParaApp(){
-  const btn = document.getElementById('btn-export-app');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Recolectando...'; }
-  try {
-    const weekKey = fechaKey(semanaActual);
-    const pagosAll = cargarPagos();
-    const pagosSemana = pagosAll[weekKey] || {};
+// Recolecta y sube los pagos cargados esta semana; devuelve cuántos se enviaron
+async function _exportarPagosInterno(token, carpetaId){
+  const weekKey = fechaKey(semanaActual);
+  const pagosAll = cargarPagos();
+  const pagosSemana = pagosAll[weekKey] || {};
 
-    const entradas = [];
-    DIAS.forEach((d, i) => {
-      const fechaClase = new Date(semanaActual.getTime() + i*86400000);
-      d.clases.forEach(cl => {
-        const pagosCl = pagosSemana[cl.id] || {};
-        cl.alumnos.forEach((nombre, idx) => {
-          const monto = (cl.montos && cl.montos[idx]) || 0;
-          if (!monto) return; // solo exportamos filas con monto cargado
-          entradas.push({
-            nombre,
-            monto,
-            metodo: metodoDe(pagosCl, idx) || '',
-            estado: estaPagado(pagosCl, idx) ? 'pagado' : 'pendiente',
-            fecha: fechaKey(fechaClase),
-            comprobante: (cl.comprobantes && cl.comprobantes[idx]) || null,
-          });
+  const entradas = [];
+  DIAS.forEach((d, i) => {
+    const fechaClase = new Date(semanaActual.getTime() + i*86400000);
+    d.clases.forEach(cl => {
+      const pagosCl = pagosSemana[cl.id] || {};
+      cl.alumnos.forEach((nombre, idx) => {
+        const monto = (cl.montos && cl.montos[idx]) || 0;
+        if (!monto) return; // solo exportamos filas con monto cargado
+        entradas.push({
+          nombre,
+          monto,
+          metodo: metodoDe(pagosCl, idx) || '',
+          estado: estaPagado(pagosCl, idx) ? 'pagado' : 'pendiente',
+          fecha: fechaKey(fechaClase),
+          comprobante: (cl.comprobantes && cl.comprobantes[idx]) || null,
         });
       });
     });
+  });
 
-    if (!entradas.length) {
-      toast_ep('No hay montos cargados esta semana para exportar');
-      if (btn) { btn.disabled = false; btn.textContent = '📤 Exportar pagos a la app'; }
-      return;
-    }
+  if (!entradas.length) return 0;
 
-    let token = await _getDriveToken();
-    const carpetaId = await _getCarpetaBackupId(token);
-    if (btn) btn.textContent = '⏳ Subiendo...';
+  const fileName = 'horario_pagos_pendientes.json';
+  const q = encodeURIComponent(`name = '${fileName}' and trashed=false${carpetaId?` and '${carpetaId}' in parents`:''}`);
+  let existingId = null;
+  try {
+    const sr = await _fetchConTimeout(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=1`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (sr.ok) existingId = (await sr.json()).files?.[0]?.id || null;
+  } catch(e) {}
 
-    const fileName = 'horario_pagos_pendientes.json';
-    const q = encodeURIComponent(`name = '${fileName}' and trashed=false${carpetaId?` and '${carpetaId}' in parents`:''}`);
-    let existingId = null;
-    try {
-      const sr = await _fetchConTimeout(
-        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=1`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (sr.ok) existingId = (await sr.json()).files?.[0]?.id || null;
-    } catch(e) {}
+  const contenido = JSON.stringify({ version:1, generado: new Date().toISOString(), entradas }, null, 2);
+  const boundary = 'hpx' + Date.now();
+  const metaObj  = { name: fileName, mimeType: 'application/json' };
+  if (!existingId && carpetaId) metaObj.parents = [carpetaId];
+  const meta = JSON.stringify(metaObj);
+  const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${contenido}\r\n--${boundary}--`;
+  const uploadUrl = existingId
+    ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart`
+    : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
 
-    const contenido = JSON.stringify({ version:1, generado: new Date().toISOString(), entradas }, null, 2);
-    const boundary = 'hpx' + Date.now();
-    const metaObj  = { name: fileName, mimeType: 'application/json' };
-    if (!existingId && carpetaId) metaObj.parents = [carpetaId];
-    const meta = JSON.stringify(metaObj);
-    const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${contenido}\r\n--${boundary}--`;
-    const uploadUrl = existingId
-      ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart`
-      : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+  const res = await _fetchConTimeout(uploadUrl, {
+    method: existingId ? 'PATCH' : 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary="${boundary}"` },
+    body
+  }, 30000);
 
-    const res = await _fetchConTimeout(uploadUrl, {
-      method: existingId ? 'PATCH' : 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary="${boundary}"` },
-      body
-    }, 30000);
-
-    if (!res.ok) throw new Error('Error ' + res.status);
-    toast_ep('✅ ' + entradas.length + ' pago(s) exportado(s) — ahora importalos desde la app principal');
-  } catch(e) {
-    console.error('exportarPagosParaApp:', e);
-    toast_ep('Error al exportar: ' + e.message);
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '📤 Exportar pagos a la app'; }
-  }
+  if (!res.ok) throw new Error('Error ' + res.status);
+  return entradas.length;
 }
 function toast_ep(msg){ alert(msg); }
 
@@ -906,7 +890,16 @@ async function subirBackupDrive(){
       }
       throw new Error(err?.error?.message || `Error ${res.status}`);
     }
-    alert(carpetaId ? `✅ Backup guardado en la carpeta "${CARPETA_BACKUP_NOMBRE}"` : '✅ Backup subido a Google Drive (no encontré la carpeta "'+CARPETA_BACKUP_NOMBRE+'", quedó en la raíz)');
+    // También exportamos los pagos cargados para que la app los pueda traer
+    let msgPagos = '';
+    try {
+      const nExportados = await _exportarPagosInterno(token, carpetaId);
+      msgPagos = nExportados ? `\n📤 ${nExportados} pago(s) enviados para la app` : '\n(sin montos cargados para enviar)';
+    } catch(e2) {
+      console.warn('exportar pagos:', e2.message);
+      msgPagos = '\n⚠️ No se pudieron enviar los pagos a la app';
+    }
+    alert((carpetaId ? `✅ Backup guardado en la carpeta "${CARPETA_BACKUP_NOMBRE}"` : '✅ Backup subido a Google Drive (no encontré la carpeta "'+CARPETA_BACKUP_NOMBRE+'", quedó en la raíz)') + msgPagos);
   } catch(e){
     const cancelErrors = ['popup_closed_by_user','access_denied','user_cancel','immediate_failed'];
     if (cancelErrors.includes(e.message)) {
