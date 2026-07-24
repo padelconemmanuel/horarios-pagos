@@ -791,6 +791,10 @@ async function _exportarPagosInterno(token, carpetaId){
           estado: estaPagado(pagosCl, idx) ? 'pagado' : 'pendiente',
           fecha: fechaKey(fechaClase),
           comprobante: (cl.comprobantes && cl.comprobantes[idx]) || null,
+          hora: cl.h || '',
+          cancha: cl.c === 'D' ? 'Descubierta' : cl.c === 'C' ? 'Cubierta' : '',
+          claseGrupo: cl.id + '|' + fechaKey(fechaClase), // agrupa alumnos de la misma clase
+          esGrupal: cl.alumnos.length > 1,
         });
       });
     });
