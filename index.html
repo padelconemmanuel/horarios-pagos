@@ -177,9 +177,8 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
   <div class="legend"><span><b style="color:var(--acc2)">C</b> = cancha cubierta</span><span><b style="color:var(--am)">D</b> = cancha descubierta</span></div>
 
   <div class="backupbar">
-    <button id="btn-drive" onclick="subirBackupDrive()">☁️ Guardar y enviar pagos a la app</button>
+    <button id="btn-drive" onclick="subirBackupDrive()">🔄 Sincronizar con la app</button>
     <button id="btn-drive-import" onclick="importarBackupDrive()">⬇️ Importar desde Google Drive</button>
-    <button id="btn-contactos" onclick="importarContactosDrive()">📇 Traer contactos</button>
     <button id="btn-verificar-contactos" onclick="verificarContactosAmbiguos()">⚠️ Verificar contactos</button>
 
   </div>
@@ -899,7 +898,21 @@ async function subirBackupDrive(){
       console.warn('exportar pagos:', e2.message);
       msgPagos = '\n⚠️ No se pudieron enviar los pagos a la app';
     }
-    alert((carpetaId ? `✅ Backup guardado en la carpeta "${CARPETA_BACKUP_NOMBRE}"` : '✅ Backup subido a Google Drive (no encontré la carpeta "'+CARPETA_BACKUP_NOMBRE+'", quedó en la raíz)') + msgPagos);
+
+    // Y traemos los alumnos/teléfonos actualizados de la app, para el matching de WhatsApp
+    let msgContactos = '';
+    try {
+      const nContactos = await _traerContactosInterno(token, carpetaId);
+      msgContactos = nContactos === null
+        ? '\n(todavía no hay backup de la app para traer contactos)'
+        : `\n📇 ${nContactos} contacto(s) actualizados`;
+    } catch(e3) {
+      console.warn('traer contactos:', e3.message);
+      msgContactos = '\n⚠️ No se pudieron traer los contactos';
+    }
+
+    if (typeof render === 'function') render();
+    alert((carpetaId ? `✅ Backup guardado en la carpeta "${CARPETA_BACKUP_NOMBRE}"` : '✅ Backup subido a Google Drive (no encontré la carpeta "'+CARPETA_BACKUP_NOMBRE+'", quedó en la raíz)') + msgPagos + msgContactos);
   } catch(e){
     const cancelErrors = ['popup_closed_by_user','access_denied','user_cancel','immediate_failed'];
     if (cancelErrors.includes(e.message)) {
@@ -909,7 +922,7 @@ async function subirBackupDrive(){
       alert('❌ Error subiendo a Drive: ' + e.message);
     }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '☁️ Subir a Google Drive'; }
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Sincronizar con la app'; }
   }
 }
 
@@ -1022,34 +1035,22 @@ function verificarContactosAmbiguos(){
   alert(msg);
 }
 
-async function importarContactosDrive(){
-  const btn = document.getElementById('btn-contactos');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Buscando...'; }
-  try {
-    let token = await _getDriveToken();
-    const carpetaId = await _getCarpetaBackupId(token);
-    const res = await _buscarArchivoDrive(token, 'PadelConEmmanuel_backup', carpetaId);
-    const archivo = res.archivo; token = res.token;
-    if (!archivo) { alert('No encontré ningún backup de la app principal (PadelConEmmanuel_backup) en tu Google Drive.'); return; }
-
-    if (btn) btn.textContent = '⏳ Descargando...';
-    const dr = await _fetchConTimeout(
-      `https://www.googleapis.com/drive/v3/files/${archivo.id}?alt=media`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!dr.ok) throw new Error(`Error ${dr.status} descargando el archivo`);
-    const data = await dr.json();
-    const alumnos = Array.isArray(data.alumnos) ? data.alumnos : [];
-    const contactos = alumnos.filter(a => a.nombre && a.tel).map(a => ({ nombre: a.nombre, tel: a.tel }));
-    localStorage.setItem(LS_CONTACTOS, JSON.stringify(contactos));
-    render();
-    alert(`✅ ${contactos.length} contactos con teléfono actualizados.`);
-  } catch(e){
-    console.error('Drive contactos error:', e);
-    alert('❌ Error trayendo contactos: ' + e.message);
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '📇 Traer contactos'; }
-  }
+// Trae los alumnos reales (nombre+tel) del backup de la app principal.
+// Devuelve la cantidad actualizada, o null si no encontró el backup.
+async function _traerContactosInterno(token, carpetaId){
+  const res = await _buscarArchivoDrive(token, 'PadelConEmmanuel_backup', carpetaId);
+  const archivo = res.archivo;
+  if (!archivo) return null;
+  const dr = await _fetchConTimeout(
+    `https://www.googleapis.com/drive/v3/files/${archivo.id}?alt=media`,
+    { headers: { Authorization: `Bearer ${res.token}` } }
+  );
+  if (!dr.ok) throw new Error(`Error ${dr.status} descargando el archivo`);
+  const data = await dr.json();
+  const alumnos = Array.isArray(data.alumnos) ? data.alumnos : [];
+  const contactos = alumnos.filter(a => a.nombre && a.tel).map(a => ({ nombre: a.nombre, tel: a.tel }));
+  localStorage.setItem(LS_CONTACTOS, JSON.stringify(contactos));
+  return contactos.length;
 }
 
 // ── Comprobante de pago por alumno ──
