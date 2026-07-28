@@ -180,6 +180,7 @@ h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-backg
     <button id="btn-drive" onclick="subirBackupDrive()">🔄 Sincronizar con la app</button>
     <button id="btn-drive-import" onclick="importarBackupDrive()">⬇️ Importar desde Google Drive</button>
     <button id="btn-verificar-contactos" onclick="verificarContactosAmbiguos()">⚠️ Verificar contactos</button>
+    <button id="btn-reset-pagos" onclick="resetearTodosLosPagos()" style="background:rgba(255,61,90,.12);color:#ff3d5a;border-color:rgba(255,61,90,.35)">🗑️ Poner todos los pagos en $0</button>
 
   </div>
 
@@ -383,6 +384,25 @@ function cargarPagos(){
   return raw ? JSON.parse(raw) : {};
 }
 function guardarPagos(pagos){ localStorage.setItem(LS_PAGOS, JSON.stringify(pagos)); }
+
+// Resetea todos los montos, comprobantes, métodos y ✓ de pagado — para volver a probar de cero.
+// NO toca los horarios ni los nombres de alumnos.
+function resetearTodosLosPagos(){
+  const ok = confirm('¿Poner en $0 todos los pagos de todas las semanas?\n\nEsto borra montos, comprobantes, métodos y el ✓ de pagado.\nLos horarios y nombres de alumnos NO se tocan.\n\nNo se puede deshacer.');
+  if (!ok) return;
+
+  DIAS.forEach(d => d.clases.forEach(cl => {
+    delete cl.montos;
+    delete cl.comprobantes;
+    delete cl.pp;
+    delete cl.rec;
+  }));
+  guardarTemplate();
+  localStorage.setItem(LS_PAGOS, '{}');
+
+  render();
+  alert('✅ Todos los pagos quedaron en $0. Listo para probar de nuevo.');
+}
 function estaPagado(pagosCl, idx){ return !!(pagosCl[idx] && pagosCl[idx].p); }
 function metodoDe(pagosCl, idx){ return (pagosCl[idx] && pagosCl[idx].m) || ''; }
 function selectMetodo(weekKey, id, idx, actual){
